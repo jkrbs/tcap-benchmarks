@@ -7,10 +7,11 @@ use tcap::service::tcap::Service;
 use tcap::object::tcap::object::RequestObject;
 use log::*;
 use tokio::sync::Mutex;
+use tokio::time::Instant;
 
 #[tokio::main]
 async fn main() {
-    SimpleLogger::new().init().unwrap();
+    SimpleLogger::new().with_level(LevelFilter::Info).init().unwrap();
 
     let service_config = Config {
         interface: "lo".to_string(),
@@ -35,10 +36,10 @@ async fn main() {
     let pong_server = service.create_remote_capability_with_id("127.0.0.1:1231".to_string(), 100).await;
 
     for _ in 0..100 {
-        info!("sending ping");
+        let now = Instant::now();
         let r = pong_server.lock().await.request_invoke_with_continuation(Some(receiver_cap.clone())).await;
-        info!("ret: {:?}", r);
+        info!("ret: {:?}: {:?}", r, now.elapsed());
     }
-
+    service.terminate().await;
     let _ = service_thread.await;
 }

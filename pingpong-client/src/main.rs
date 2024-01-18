@@ -14,9 +14,9 @@ async fn main() {
     SimpleLogger::new().with_level(LevelFilter::Info).init().unwrap();
 
     let service_config = Config {
-        interface: "lo".to_string(),
-        address: "127.0.0.1:1234".to_string(),
-        switch_addr: "10.0.0.1".to_string(),
+        interface: "veth3".to_string(),
+        address: "10.0.3.2:1234".to_string(),
+        switch_addr: "10.0.9.2:1234".to_string(),
     };
     let service = Service::new(service_config).await;
     let s = service.clone();
@@ -24,7 +24,9 @@ async fn main() {
         let _ = s.run().await.unwrap();
     });
 
-    let pong_reciever = Arc::new(Mutex::new(RequestObject::new(Box::new(move |cap: Option<Arc<Mutex<Capability>>>| {
+    let pong_server = service.create_remote_capability_with_id("10.0.1.2:1234".to_string(), 100).await;
+
+    let pong_reciever = Arc::new(Mutex::new(RequestObject::new(Box::new(move |caps: Vec<Option<Arc<Mutex<Capability>>>>| {
         info!("Received Pong");
         
         Ok(())
@@ -32,12 +34,11 @@ async fn main() {
 
     let receiver_cap = service.create_capability().await;
     let _ = receiver_cap.lock().await.bind(pong_reciever).await;
-    receiver_cap.lock().await.delegate("127.0.0.1:1231".into()).await.unwrap();
-    let pong_server = service.create_remote_capability_with_id("127.0.0.1:1231".to_string(), 100).await;
+    receiver_cap.lock().await.delegate("10.0.1.2:1234".into()).await.unwrap();
 
     for _ in 0..100 {
         let now = Instant::now();
-        let r = pong_server.lock().await.request_invoke_with_continuation(Some(receiver_cap.clone())).await;
+        let r = pong_server.lock().await.request_invoke_with_continuation(vec!(Some(receiver_cap.clone()))).await;
         info!("ret: {:?}: {:?}", r, now.elapsed());
     }
     service.terminate().await;

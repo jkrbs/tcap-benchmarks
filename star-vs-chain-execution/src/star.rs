@@ -19,12 +19,13 @@ lazy_static! {
     static ref COUNTER: Mutex<u128> = Mutex::new(0 as u128);
 }
 
-pub async fn star_benchmark(steps: u128, services: Vec<Service>) {
-    let small_return_handler = Arc::new(Mutex::new(
+pub async fn star_benchmark_client(steps: u128, service: Service, remote: String) {
+        let small_return_handler = Arc::new(Mutex::new(
         RequestObject::new(Box::new(
             move |caps: Vec<Option<Arc<Mutex<Capability>>>>| {
                 let handler = async move |caps: tcap::tcap::HandlerParameters| {
                     COUNTER.lock().await.add_assign(1);
+                  //  info!("small handler called");
                 };
 
                 tokio::runtime::Handle::current().spawn(handler(caps));
@@ -35,7 +36,7 @@ pub async fn star_benchmark(steps: u128, services: Vec<Service>) {
         .await,
     ));
 
-    let small_return_handler_cap = services[0].create_capability().await;
+    let small_return_handler_cap = service.create_capability().await;
     small_return_handler_cap
         .lock()
         .await
@@ -52,16 +53,53 @@ pub async fn star_benchmark(steps: u128, services: Vec<Service>) {
         }))
         .await,
     ));
-    let final_cap = services[0].create_capability().await;
+    let final_cap = service.create_capability().await;
     final_cap.lock().await.bind_req(final_handler).await;
 
-    let star_handler = Arc::new(Mutex::new(
+    small_return_handler_cap
+        .lock()
+        .await
+        .delegate(remote.as_str().into())
+        .await
+        .unwrap();
+    final_cap
+        .lock()
+        .await
+        .delegate(remote.as_str().into())
+        .await
+        .unwrap();
+
+    let star_remote = service
+        .create_remote_capability_with_id(remote.as_str().into(), 100)
+        .await;
+
+    star_remote
+        .lock()
+        .await
+        .request_invoke_with_continuation(vec![
+            small_return_handler_cap.lock().await.cap_id,
+            final_cap.lock().await.cap_id,
+        ])
+        .await
+        .unwrap();
+
+    notifier.notified().await;
+    info!("Counter Value {:?}", COUNTER.lock().await);
+}
+
+pub async fn star_benchmark_server(steps: u128, service: Service, remote: String) {
+    let notifier = Arc::new(Notify::new());
+    let n = notifier.clone();
+    let start_handler = Arc::new(Mutex::new(
         RequestObject::new(Box::new(
             move |caps: Vec<Option<Arc<Mutex<Capability>>>>| {
                 info!("Executing Start Lambda");
 
-                let handler = async move |caps: Vec<Option<Arc<Mutex<Capability>>>>| {
+                let handler = async move |caps: Vec<Option<Arc<Mutex<Capability>>>>, notifier: Arc<Notify>| {
                     for _ in 0..steps {
+                        if caps[0].is_none() {
+                            error!("error in cap transmission: {:?}", caps);
+                        }
                         caps[0]
                             .as_ref()
                             .unwrap()
@@ -79,44 +117,21 @@ pub async fn star_benchmark(steps: u128, services: Vec<Service>) {
                         .request_invoke()
                         .await
                         .unwrap();
+                    notifier.notify_waiters();
                 };
 
-                tokio::runtime::Handle::current().spawn(handler(caps));
+                let wait_for_cont_finish = Arc::new(Notify::new());
+                tokio::runtime::Handle::current().spawn(handler(caps, wait_for_cont_finish.clone()));
 
+                wait_for_cont_finish.notified();
+                n.notify_waiters();
                 Ok(())
             },
         ))
         .await,
     ));
-
-    let start = services[1].create_capability().await;
-    start.lock().await.bind_req(star_handler).await;
-    small_return_handler_cap
-        .lock()
-        .await
-        .delegate("127.0.0.1:1235".into())
-        .await
-        .unwrap();
-    final_cap
-        .lock()
-        .await
-        .delegate("127.0.0.1:1235".into())
-        .await
-        .unwrap();
-
-    let star_remote = services[0]
-        .create_remote_capability_with_id("127.0.0.1:1235".into(), start.lock().await.cap_id)
-        .await;
-
-    star_remote
-        .lock()
-        .await
-        .request_invoke_with_continuation(vec![
-            small_return_handler_cap.lock().await.cap_id,
-            final_cap.lock().await.cap_id,
-        ])
-        .await
-        .unwrap();
+    let start = service.create_capability_with_id(100).await;
+    start.lock().await.bind_req(start_handler).await;
 
     notifier.notified().await;
 }

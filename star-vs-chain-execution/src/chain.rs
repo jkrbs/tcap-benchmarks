@@ -28,6 +28,8 @@ lazy_static! {
 }
 
 pub async fn chain_benchmark_client(steps: u128, service: Service, remote: String) {
+    CLIENT.lock().await.clear();
+    CAPID_ARRAY.lock().await.clear();
     info!("Starting Chain Benchmark");
     let intermediate1_handler = move |caps: tcap::tcap::HandlerParameters| {
         let handler = async move |caps: tcap::tcap::HandlerParameters| {
@@ -124,6 +126,9 @@ pub async fn chain_benchmark_client(steps: u128, service: Service, remote: Strin
 }
 
 pub async fn chain_benchmark_server(steps: u128, service: Service, remote: String) {
+    CLIENT.lock().await.clear();
+    CAPID_ARRAY.lock().await.clear();
+
     let notifier = Arc::new(Notify::new());
 
     let n = notifier.clone();

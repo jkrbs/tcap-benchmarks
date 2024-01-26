@@ -4,8 +4,10 @@ use clap::Parser;
 use csv::Writer;
 use log::*;
 use simple_logger::SimpleLogger;
+use tokio::sync::Mutex;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
+use std::sync::Arc;
 use std::time::Instant;
 use tcap::{config::Config, service::tcap::Service};
 pub mod chain;
@@ -36,6 +38,9 @@ struct Args {
     #[arg(short, long)]
     remote: String,
 
+    /// set scaling evaluation
+    #[arg(long, action)]
+    scaling: bool,
 
     /// set debug print level
     #[arg(long, action)]
@@ -71,6 +76,49 @@ enum Mode {
     }
 }
 
+async fn write_csv(args: Args, times: Arc<Mutex<HashMap::<u8, Vec<(u128, u128)>>>>) {
+    let scalestr = match args.scaling {
+        true => "scaling",
+        false => "no-scaling",
+    };
+
+    let file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .create(true)
+        .open(format!(
+            "star-chain-steps{:?}-{:?}-{:?}-{:?}-iterations{:?}-{:?}.csv",
+            args.depth,
+            scalestr, 
+            args.mode,
+            args.remote,
+            args.iterations,
+            Service::get_compilation_commit()
+        ))
+        .unwrap();
+    let mut wtr = Writer::from_writer(file);
+
+    // these call require nightly
+    // let mut times = times.
+    let mut times = times.lock().await;
+    let mut keys = times.keys().collect::<Vec<&u8>>();
+    keys.sort();
+    keys.iter().for_each(|key| {
+        let mut counter = 0;
+        times.get(*key).unwrap().iter().for_each(|v| {
+            wtr.write_record([
+                key.to_string().as_str(),
+                counter.to_string().as_str(),
+                v.0.to_string().as_str(),
+                v.1.to_string().as_str(),
+            ])
+            .unwrap();
+            counter += 1;
+        });
+    });
+    wtr.flush().unwrap();
+}
+
 #[tokio::main]
 async fn main() {
     
@@ -92,9 +140,20 @@ async fn main() {
         Mode::Server { interface, address, switch_addr } => Config { interface: interface.clone(), address: address.clone(), switch_addr: switch_addr.clone() },
     };
 
-    let mut times = HashMap::<u8, Vec<u128>>::new();
-    times.insert(0, Vec::new());
-    times.insert(1, Vec::new());
+    let times = Arc::new(Mutex::new(HashMap::<u8, Vec<(u128, u128)>>::new()));
+    times.lock().await.insert(0, Vec::new());
+    times.lock().await.insert(1, Vec::new());
+
+    let a = args.clone();
+    let t = times.clone();
+    ctrlc::set_handler(move || {
+        let writer = async move |a: Args, t: Arc<Mutex<HashMap<u8, Vec<(u128, u128)>>>>| {
+        write_csv(a.clone(), t.clone()).await;
+    };
+
+    tokio::spawn(writer(a.clone(), t.clone()));
+    })
+    .expect("Error setting Ctrl-C handler");
 
     let service = Service::new(service_config.clone()).await;
 
@@ -103,23 +162,43 @@ async fn main() {
         let _ = s.run().await.unwrap();
     });
 
-    let start = Instant::now();
-    match &args.mode {
-        Mode::Client { .. } => star_benchmark_client(args.depth, service.clone(), args.remote.clone()).await,
-        Mode::Server { .. } => star_benchmark_server(args.depth, service.clone(), args.remote.clone()).await,
-    };
+    if args.scaling {
+        for depth in [10, 100, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000] {
+            let start = Instant::now();
+            match &args.mode {
+                Mode::Client { .. } => star_benchmark_client(depth, service.clone(), args.remote.clone()).await,
+                Mode::Server { .. } => star_benchmark_server(depth, service.clone(), args.remote.clone()).await,
+            };
+        
+            times.lock().await.get_mut(&0).unwrap().push((depth, start.elapsed().as_micros()));
 
-    times.get_mut(&0).unwrap().push(start.elapsed().as_micros());
-    // let s1packets = service1.recv_counter.lock().await.clone() + service1.send_counter.lock().await.clone();
-    // println!("Elapsed star: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / steps, s1packets);
+            let start = Instant::now();
+            match &args.mode {
+                Mode::Client { .. } => chain_benchmark_client(depth/2 -1, service.clone(), args.remote.clone()).await,
+                Mode::Server { .. } => chain_benchmark_server(depth/2 - 2, service.clone(), args.remote.clone()).await,
+            };
+            
+            times.lock().await.get_mut(&1).unwrap().push((depth, start.elapsed().as_micros()));
+        }
+    } else {
+        let start = Instant::now();
+        match &args.mode {
+            Mode::Client { .. } => star_benchmark_client(args.depth, service.clone(), args.remote.clone()).await,
+            Mode::Server { .. } => star_benchmark_server(args.depth, service.clone(), args.remote.clone()).await,
+        };
 
-    let start = Instant::now();
-    match &args.mode {
-        Mode::Client { .. } => chain_benchmark_client(args.depth/2 -1, service.clone(), args.remote.clone()).await,
-        Mode::Server { .. } => chain_benchmark_server(args.depth/2 - 2, service.clone(), args.remote.clone()).await,
-    };
-    
-    times.get_mut(&1).unwrap().push(start.elapsed().as_micros());
+        times.lock().await.get_mut(&0).unwrap().push((args.depth, start.elapsed().as_micros()));
+        // let s1packets = service1.recv_counter.lock().await.clone() + service1.send_counter.lock().await.clone();
+        // println!("Elapsed star: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / steps, s1packets);
+
+        let start = Instant::now();
+        match &args.mode {
+            Mode::Client { .. } => chain_benchmark_client(args.depth/2 -1, service.clone(), args.remote.clone()).await,
+            Mode::Server { .. } => chain_benchmark_server(args.depth/2 - 2, service.clone(), args.remote.clone()).await,
+        };
+        
+        times.lock().await.get_mut(&1).unwrap().push((args.depth, start.elapsed().as_micros()));
+    }
     // let s1packets_now = service1.recv_counter.lock().await.clone() + service1.send_counter.lock().await.clone();
     // println!("Elapsed chain: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / steps, s1packets_now-s1packets);
     service.terminate().await;
@@ -127,33 +206,5 @@ async fn main() {
 
     drop(service);
 
-    let file = OpenOptions::new()
-        .write(true)
-        .append(true)
-        .create(true)
-        .open(format!(
-            "star-chain-steps{:?}-{:?}-{:?}-iterations{:?}-{:?}.csv",
-            args.depth,
-            args.mode,
-            args.remote,
-            args.iterations,
-            Service::get_compilation_commit()
-        ))
-        .unwrap();
-    let mut wtr = Writer::from_writer(file);
-    let mut keys = times.keys().collect::<Vec<&u8>>();
-    keys.sort();
-    keys.iter().for_each(|key| {
-        let mut counter = 0;
-        times.get(*key).unwrap().iter().for_each(|v| {
-            wtr.write_record([
-                key.to_string().as_str(),
-                counter.to_string().as_str(),
-                v.to_string().as_str(),
-            ])
-            .unwrap();
-            counter += 1;
-        });
-    });
-    wtr.flush().unwrap();
+    write_csv(args, times).await;
 }

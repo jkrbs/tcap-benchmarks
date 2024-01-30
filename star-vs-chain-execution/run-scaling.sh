@@ -1,4 +1,4 @@
-cargo build --release
+cargo build #--release
 n=0
 while [ "$n" -lt 50 ]; do
     n=$(( n + 1 ))

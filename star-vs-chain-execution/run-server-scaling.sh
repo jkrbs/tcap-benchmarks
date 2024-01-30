@@ -2,7 +2,6 @@ cargo build --release
 n=0
 while [ "$n" -lt 50 ]; do
     n=$(( n + 1 ))
-
     ./target/release/star-vs-chain-execution \
 	--depth 1000 \
 	--iterations 50 \

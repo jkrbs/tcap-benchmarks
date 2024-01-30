@@ -1,5 +1,5 @@
 use std::future::Future;
-use std::ops::{AddAssign, Deref};
+use std::ops::{AddAssign, MulAssign, Deref};
 use std::{clone, sync::Arc, time::Duration};
 
 use log::*;
@@ -9,6 +9,7 @@ use tcap::{
     service::tcap::Service,
 };
 use tokio::sync::Notify;
+use tokio::time;
 use tokio::{sync::Mutex, time::Instant};
 
 use tokio::runtime::Handle;
@@ -20,16 +21,10 @@ lazy_static! {
 }
 
 pub async fn star_benchmark_client(steps: u128, service: Service, remote: String) {
+        COUNTER.lock().await.mul_assign(0);
         let small_return_handler = Arc::new(Mutex::new(
         RequestObject::new(Box::new(
             move |caps: Vec<Option<Arc<Mutex<Capability>>>>| {
-                let handler = async move |caps: tcap::tcap::HandlerParameters| {
-                    COUNTER.lock().await.add_assign(1);
-                  //  info!("small handler called");
-                };
-
-                tokio::runtime::Handle::current().spawn(handler(caps));
-
                 return Ok::<(), ()>(());
             },
         ))
@@ -48,7 +43,7 @@ pub async fn star_benchmark_client(steps: u128, service: Service, remote: String
     let n = notifier.clone();
     let final_handler = Arc::new(Mutex::new(
         RequestObject::new(Box::new(move |cap: Vec<Option<Arc<Mutex<Capability>>>>| {
-            n.notify_waiters();
+                n.notify_waiters();
             Ok(())
         }))
         .await,
@@ -88,6 +83,7 @@ pub async fn star_benchmark_client(steps: u128, service: Service, remote: String
 }
 
 pub async fn star_benchmark_server(steps: u128, service: Service, remote: String) {
+    COUNTER.lock().await.mul_assign(0);
     let notifier = Arc::new(Notify::new());
     let n = notifier.clone();
     let start_handler = Arc::new(Mutex::new(
@@ -96,10 +92,10 @@ pub async fn star_benchmark_server(steps: u128, service: Service, remote: String
                 info!("Executing Start Lambda");
 
                 let handler = async move |caps: Vec<Option<Arc<Mutex<Capability>>>>, notifier: Arc<Notify>| {
+                    if caps[0].is_none() {
+                        error!("error in cap transmission: {:?}", caps);
+                    }
                     for _ in 0..steps {
-                        if caps[0].is_none() {
-                            error!("error in cap transmission: {:?}", caps);
-                        }
                         caps[0]
                             .as_ref()
                             .unwrap()
@@ -123,7 +119,7 @@ pub async fn star_benchmark_server(steps: u128, service: Service, remote: String
                 let wait_for_cont_finish = Arc::new(Notify::new());
                 tokio::runtime::Handle::current().spawn(handler(caps, wait_for_cont_finish.clone()));
 
-                wait_for_cont_finish.notified();
+                let _ = wait_for_cont_finish.notified();
                 n.notify_waiters();
                 Ok(())
             },

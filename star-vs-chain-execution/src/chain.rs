@@ -1,6 +1,6 @@
 use std::{
     future::IntoFuture,
-    ops::{Add, AddAssign},
+    ops::{Add, AddAssign, MulAssign},
     sync::Arc,
     time::Duration,
 };
@@ -29,8 +29,9 @@ lazy_static! {
 
 pub async fn chain_benchmark_client(steps: u128, service: Service, remote: String) {
     CLIENT.lock().await.clear();
+    SERVER.lock().await.clear();
     CAPID_ARRAY.lock().await.clear();
-    info!("Starting Chain Benchmark");
+    COUNTER.lock().await.mul_assign(0);
     let intermediate1_handler = move |caps: tcap::tcap::HandlerParameters| {
         let handler = async move |caps: tcap::tcap::HandlerParameters| {
             COUNTER.lock().await.add_assign(1);
@@ -54,7 +55,6 @@ pub async fn chain_benchmark_client(steps: u128, service: Service, remote: Strin
         };
 
         tokio::runtime::Handle::current().spawn(handler(caps));
-
         return Ok::<(), ()>(());
     };
 
@@ -127,6 +127,8 @@ pub async fn chain_benchmark_client(steps: u128, service: Service, remote: Strin
 
 pub async fn chain_benchmark_server(steps: u128, service: Service, remote: String) {
     CLIENT.lock().await.clear();
+    SERVER.lock().await.clear();
+    COUNTER.lock().await.mul_assign(0);
     CAPID_ARRAY.lock().await.clear();
 
     let notifier = Arc::new(Notify::new());
@@ -152,7 +154,7 @@ pub async fn chain_benchmark_server(steps: u128, service: Service, remote: Strin
                         caps[0].as_ref().unwrap().lock().await.cap_id,
                     )
                     .await;
-                let _ = fin.lock().await.request_invoke().await;
+                let _ = fin.lock().await.request_invoke_no_wait().await;
                 n.notify_waiters();
                 Ok(())
             } else {

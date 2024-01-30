@@ -8,10 +8,8 @@ edition = "2021"
 [dependencies]
 tcap = {path="../../tcap-rs"}
 tokio = { version = "1", features = ["full"] }
-async-std = "1.12.0"
 log = "0.4.20"
 simple_logger = "4.2.0"
 csv = "1.3.0"
 clap = { version = "4.4.7", features = ["derive"] }
 lazy_static = "1.4.0"
-ctrlc = "3.4"

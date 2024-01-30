@@ -144,17 +144,6 @@ async fn main() {
     times.lock().await.insert(0, Vec::new());
     times.lock().await.insert(1, Vec::new());
 
-    let a = args.clone();
-    let t = times.clone();
-    ctrlc::set_handler(move || {
-        let writer = async move |a: Args, t: Arc<Mutex<HashMap<u8, Vec<(u128, u128)>>>>| {
-        write_csv(a.clone(), t.clone()).await;
-    };
-
-    tokio::spawn(writer(a.clone(), t.clone()));
-    })
-    .expect("Error setting Ctrl-C handler");
-
     let service = Service::new(service_config.clone()).await;
 
     let s = service.clone();
@@ -163,7 +152,10 @@ async fn main() {
     });
 
     if args.scaling {
-        for depth in [10, 100, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000] {
+        for depth in [10, 100, 1000, 2000, 3000, 4000, 5000, 6000, 7000] {
+            let times = Arc::new(Mutex::new(HashMap::<u8, Vec<(u128, u128)>>::new()));
+            times.lock().await.insert(0, Vec::new());
+            times.lock().await.insert(1, Vec::new());
             let start = Instant::now();
             match &args.mode {
                 Mode::Client { .. } => star_benchmark_client(depth, service.clone(), args.remote.clone()).await,
@@ -174,30 +166,38 @@ async fn main() {
 
             let start = Instant::now();
             match &args.mode {
-                Mode::Client { .. } => chain_benchmark_client(depth/2 -1, service.clone(), args.remote.clone()).await,
-                Mode::Server { .. } => chain_benchmark_server(depth/2 - 2, service.clone(), args.remote.clone()).await,
+                Mode::Client { .. } => chain_benchmark_client((depth/2) -1, service.clone(), args.remote.clone()).await,
+                Mode::Server { .. } => chain_benchmark_server((depth/2) - 2, service.clone(), args.remote.clone()).await,
             };
             
             times.lock().await.get_mut(&1).unwrap().push((depth, start.elapsed().as_micros()));
+            write_csv(args.clone(), times).await;
         }
     } else {
+        let times = Arc::new(Mutex::new(HashMap::<u8, Vec<(u128, u128)>>::new()));
+        times.lock().await.insert(0, Vec::new());
+        times.lock().await.insert(1, Vec::new());
         let start = Instant::now();
         match &args.mode {
             Mode::Client { .. } => star_benchmark_client(args.depth, service.clone(), args.remote.clone()).await,
             Mode::Server { .. } => star_benchmark_server(args.depth, service.clone(), args.remote.clone()).await,
         };
-
-        times.lock().await.get_mut(&0).unwrap().push((args.depth, start.elapsed().as_micros()));
-        // let s1packets = service1.recv_counter.lock().await.clone() + service1.send_counter.lock().await.clone();
-        // println!("Elapsed star: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / steps, s1packets);
+        let micros = start.elapsed().as_micros();
+        times.lock().await.get_mut(&0).unwrap().push((args.depth, micros));
+        let mut s1packets = service.recv_counter.lock().await.clone() + service.send_counter.lock().await.clone();
+        println!("Elapsed star: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / args.depth, s1packets);
 
         let start = Instant::now();
         match &args.mode {
-            Mode::Client { .. } => chain_benchmark_client(args.depth/2 -1, service.clone(), args.remote.clone()).await,
-            Mode::Server { .. } => chain_benchmark_server(args.depth/2 - 2, service.clone(), args.remote.clone()).await,
+            Mode::Client { .. } => chain_benchmark_client((args.depth/2) - 1, service.clone(), args.remote.clone()).await,
+            Mode::Server { .. } => chain_benchmark_server((args.depth/2) - 2, service.clone(), args.remote.clone()).await,
         };
-        
-        times.lock().await.get_mut(&1).unwrap().push((args.depth, start.elapsed().as_micros()));
+        let micros = start.elapsed().as_micros();
+        times.lock().await.get_mut(&1).unwrap().push((args.depth, micros));
+        s1packets = (service.recv_counter.lock().await.clone() + service.send_counter.lock().await.clone()) - s1packets;
+        println!("Elapsed chain: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / args.depth, s1packets);
+
+        write_csv(args.clone(), times).await;
     }
     // let s1packets_now = service1.recv_counter.lock().await.clone() + service1.send_counter.lock().await.clone();
     // println!("Elapsed chain: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / steps, s1packets_now-s1packets);
@@ -205,6 +205,4 @@ async fn main() {
     service_thread.abort();
 
     drop(service);
-
-    write_csv(args, times).await;
 }

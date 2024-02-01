@@ -58,7 +58,6 @@ pub async fn chain_benchmark_client(steps: u128, service: Service, remote: Strin
         return Ok::<(), ()>(());
     };
 
-
     let n = Arc::new(Notify::new());
     let not = n.clone();
     let final_handler = move |caps: tcap::tcap::HandlerParameters| {
@@ -77,8 +76,6 @@ pub async fn chain_benchmark_client(steps: u128, service: Service, remote: Strin
     let intermediate1_cap = service.create_capability_with_id(400).await;
     intermediate1_cap.lock().await.bind_req(intermediate1).await;
 
-   
-
     let final_cap = service.create_capability_with_id(50).await;
     final_cap.lock().await.bind_req(fin).await;
 
@@ -91,8 +88,6 @@ pub async fn chain_benchmark_client(steps: u128, service: Service, remote: Strin
         .await
         .unwrap();
 
-
-
     final_cap
         .lock()
         .await
@@ -103,9 +98,7 @@ pub async fn chain_benchmark_client(steps: u128, service: Service, remote: Strin
     let start0 = service
         .create_remote_capability_with_id(remote.clone(), 100)
         .await;
-    let intermediate2_cap = service
-        .create_remote_capability_with_id(remote, 200)
-        .await;
+    let intermediate2_cap = service.create_remote_capability_with_id(remote, 200).await;
     CAPID_ARRAY.lock().await.push(final_cap.lock().await.cap_id);
     CAPID_ARRAY
         .lock()
@@ -174,10 +167,9 @@ pub async fn chain_benchmark_server(steps: u128, service: Service, remote: Strin
     let intermediate2 = Arc::new(Mutex::new(
         RequestObject::new(Box::new(intermediate2_handler)).await,
     ));
-  
+
     let intermediate2_cap = service.create_capability_with_id(200).await;
     intermediate2_cap.lock().await.bind_req(intermediate2).await;
-
 
     let start_handler = |caps: tcap::tcap::HandlerParameters| {
         let handler = async move |fun: Arc<Mutex<Capability>>,
@@ -198,11 +190,13 @@ pub async fn chain_benchmark_server(steps: u128, service: Service, remote: Strin
     let start_cap = service.create_capability_with_id(100).await;
     start_cap.lock().await.bind_req(start).await;
 
-   
-    let final_cap = service.create_remote_capability_with_id(remote.clone(), 50).await;
-    let intermediate1_cap = service.create_remote_capability_with_id(remote.clone(), 400).await;
+    let final_cap = service
+        .create_remote_capability_with_id(remote.clone(), 50)
+        .await;
+    let intermediate1_cap = service
+        .create_remote_capability_with_id(remote.clone(), 400)
+        .await;
 
-    
     CLIENT.lock().await.push_str(remote.as_str());
     CAPID_ARRAY.lock().await.push(final_cap.lock().await.cap_id);
     CAPID_ARRAY

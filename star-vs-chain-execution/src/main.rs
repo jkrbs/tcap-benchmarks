@@ -199,8 +199,7 @@ async fn main() {
 
         write_csv(args.clone(), times).await;
     }
-    // let s1packets_now = service1.recv_counter.lock().await.clone() + service1.send_counter.lock().await.clone();
-    // println!("Elapsed chain: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / steps, s1packets_now-s1packets);
+
     service.terminate().await;
     service_thread.abort();
 

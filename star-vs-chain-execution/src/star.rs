@@ -1,5 +1,5 @@
 use std::future::Future;
-use std::ops::{AddAssign, MulAssign, Deref};
+use std::ops::{AddAssign, Deref, MulAssign};
 use std::{clone, sync::Arc, time::Duration};
 
 use log::*;
@@ -21,8 +21,8 @@ lazy_static! {
 }
 
 pub async fn star_benchmark_client(steps: u128, service: Service, remote: String) {
-        COUNTER.lock().await.mul_assign(0);
-        let small_return_handler = Arc::new(Mutex::new(
+    COUNTER.lock().await.mul_assign(0);
+    let small_return_handler = Arc::new(Mutex::new(
         RequestObject::new(Box::new(
             move |caps: Vec<Option<Arc<Mutex<Capability>>>>| {
                 return Ok::<(), ()>(());
@@ -43,7 +43,7 @@ pub async fn star_benchmark_client(steps: u128, service: Service, remote: String
     let n = notifier.clone();
     let final_handler = Arc::new(Mutex::new(
         RequestObject::new(Box::new(move |cap: Vec<Option<Arc<Mutex<Capability>>>>| {
-                n.notify_waiters();
+            n.notify_waiters();
             Ok(())
         }))
         .await,
@@ -91,7 +91,8 @@ pub async fn star_benchmark_server(steps: u128, service: Service, remote: String
             move |caps: Vec<Option<Arc<Mutex<Capability>>>>| {
                 info!("Executing Start Lambda");
 
-                let handler = async move |caps: Vec<Option<Arc<Mutex<Capability>>>>, notifier: Arc<Notify>| {
+                let handler = async move |caps: Vec<Option<Arc<Mutex<Capability>>>>,
+                                          notifier: Arc<Notify>| {
                     if caps[0].is_none() {
                         error!("error in cap transmission: {:?}", caps);
                     }
@@ -117,7 +118,8 @@ pub async fn star_benchmark_server(steps: u128, service: Service, remote: String
                 };
 
                 let wait_for_cont_finish = Arc::new(Notify::new());
-                tokio::runtime::Handle::current().spawn(handler(caps, wait_for_cont_finish.clone()));
+                tokio::runtime::Handle::current()
+                    .spawn(handler(caps, wait_for_cont_finish.clone()));
 
                 let _ = wait_for_cont_finish.notified();
                 n.notify_waiters();

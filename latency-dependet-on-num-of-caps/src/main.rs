@@ -29,7 +29,7 @@ async fn create_receiver_handler(service: Service) -> (Arc<Notify>, Arc<Mutex<Ca
 
 #[tokio::main]
 async fn main() {
-    let num_caps = [1,10,100,1000,10000,20000];
+    let num_caps = [1,10,100,1000,10000,20000, 100000, 1000000];
     let remote = "10.0.1.2:1234";
     SimpleLogger::new().with_level(LevelFilter::Info).init().unwrap();
 
@@ -62,7 +62,7 @@ async fn main() {
 
         for _ in 0..100 {
             let now = Instant::now();
-            pong_server.lock().await.request_invoke_with_continuation(vec!(Some(cap.clone()))).await.unwrap();
+            pong_server.lock().await.request_invoke_with_continuation(vec!(cap.lock().await.cap_id)).await.unwrap();
             
             let time = now.elapsed();
             time_vec.push(time);

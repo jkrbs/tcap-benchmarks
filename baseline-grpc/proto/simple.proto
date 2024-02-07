@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package simple;
+
+service PingPong {
+    rpc Pong (Request) returns (Response) {}
+}
+
+message Request {
+    int64 buf = 1;
+}
+
+message Response {
+    int64 buf = 1;
+}

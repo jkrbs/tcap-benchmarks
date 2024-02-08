@@ -2,6 +2,7 @@
 
 mod server;
 mod client;
+mod csv_writer;
 
 use clap::Parser;
 use log::LevelFilter;

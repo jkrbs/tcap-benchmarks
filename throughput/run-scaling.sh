@@ -2,8 +2,7 @@ cargo build #--release
 n=0
 while [ "$n" -lt 50 ]; do
     n=$(( n + 1 ))
-    ./target/release/star-vs-chain-execution \
-	--depth 1000 \
+    ./target/release/throughput \
     --iterations 50 \
     --remote 10.0.1.2:1234 \
     --scaling \

@@ -70,10 +70,10 @@ enum Mode {
     },
 }
 
-async fn write_csv(args: Args, times: Arc<Mutex<Vec<(u128, u128)>>>) {
+async fn write_csv(args: Args, times: Arc<Mutex<Vec<(usize, u128)>>>) {
     let scalestr = match args.scaling {
         true => "scaling",
-        false => "no-scaling",
+        false => "no-scaling-1024bytes",
     };
 
     let file = OpenOptions::new()
@@ -81,7 +81,7 @@ async fn write_csv(args: Args, times: Arc<Mutex<Vec<(u128, u128)>>>) {
         .append(true)
         .create(true)
         .open(format!(
-            "throughput-1024bytes-{:?}-{:?}-iterations{:?}-{:?}.csv",
+            "throughput-{:?}-{:?}-iterations{:?}-{:?}.csv",
             scalestr,
             args.remote,
             args.iterations,
@@ -92,7 +92,7 @@ async fn write_csv(args: Args, times: Arc<Mutex<Vec<(u128, u128)>>>) {
 
     // these call require nightly
     // let mut times = times.
-    let mut times = times.lock().await;
+    let times = times.lock().await;
     times.iter().for_each(|v| {
             wtr.write_record([
                 v.0.to_string().as_str(),
@@ -136,8 +136,7 @@ async fn main() {
             switch_addr: switch_addr.clone(),
         },
     };
-
-    let times = Arc::new(Mutex::new(Vec::<(u128, u128)>::new()));
+    
     let service = Service::new(service_config.clone()).await;
 
     let s = service.clone();
@@ -146,12 +145,12 @@ async fn main() {
     });
 
     if args.scaling {
-        for size in [10, 100, 1000, 2000, 3000, 4000, 5000, 6000, 7000] {
-            let times = Arc::new(Mutex::new(Vec::<(u128, u128)>::new()));
+        for size in [10, 100, 256, 512,1024, 2048, 3000, 4000, 5000, 6000, 7000, 2^15, 2^18, 2^20] {
+            let times = Arc::new(Mutex::new(Vec::<(usize, u128)>::new()));
             match &args.mode {
                 Mode::Client { .. } => {
                     let start = Instant::now();
-                    client(size, service.clone(), args.remote.clone(), args.debug).await;
+                    client(args.iterations, service.clone(), args.remote.clone(), args.debug, size).await;
                     times
                 .lock()
                 .await
@@ -165,23 +164,23 @@ async fn main() {
             write_csv(args.clone(), times).await;
         }
     } else {
-        let times = Arc::new(Mutex::new(Vec::<(u128, u128)>::new()));
+        let times = Arc::new(Mutex::new(Vec::<(usize, u128)>::new()));
         
         match &args.mode {
             Mode::Client { .. } => {
                 let start = Instant::now();
-                client(args.iterations, service.clone(), args.remote.clone(), args.debug).await;
-                let micros = start.elapsed().as_micros();
+                client(args.iterations, service.clone(), args.remote.clone(), args.debug, 1024).await;
+                let micros = start.elapsed().as_micros()/args.iterations;
         times
             .lock()
             .await
-            .push((args.iterations, micros));
-        let mut s1packets =
+            .push((1024, micros));
+        let s1packets =
             service.recv_counter.lock().await.clone() + service.send_counter.lock().await.clone();
         println!(
             "Elapsed: {:?}µs, rate: {:?}bytes/µs, number of packets: service1: {:?}",
             micros,
-            1024*args.iterations/micros,
+            1024/micros,
             s1packets
         );
 

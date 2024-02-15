@@ -1,13 +1,16 @@
-use core::slice::SlicePattern;
 use std::sync::Arc;
-
 use tcap::service::tcap::Service;
 use tcap::object::tcap::object::{MemoryObject, RequestObject};
 use tokio::sync::{Mutex, Notify};
-use bytemuck::*;
 
 pub async fn server(service: Service) {
-    let buf =  [0 as u8; 1024];
+    let mut buf =  [0 as u8; 1024];
+    let mut val = 0;
+    for i in 0..1024 {
+        buf[i] = val;
+        val += 3;
+    }
+
     let mem_reg = Arc::new(Mutex::new(MemoryObject::new(&buf).await));
     let mem_cap = service.create_capability_with_id(200).await;
     mem_cap.lock().await.bind_mem(mem_reg).await;

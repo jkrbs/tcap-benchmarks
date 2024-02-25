@@ -4,12 +4,12 @@ use clap::Parser;
 use csv::Writer;
 use log::*;
 use simple_logger::SimpleLogger;
-use tokio::sync::Mutex;
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::sync::Arc;
 use std::time::Instant;
 use tcap::{config::Config, service::tcap::Service};
+use tokio::sync::Mutex;
 pub mod chain;
 pub mod star;
 
@@ -44,23 +44,24 @@ struct Args {
 
     /// set debug print level
     #[arg(long, action)]
-    debug: bool
+    debug: bool,
 }
 
 #[derive(clap::Subcommand, Clone, Debug)]
 enum Mode {
-    Client {    
+    Client {
         /// The Network Interface to bind
         #[arg(short, long)]
         interface: String,
-    
+
         /// Address to bind to (including port number)
         #[arg(short, long)]
         address: String,
-    
+
         /// Address of the switch control plane (including port number)
         #[arg(short, long)]
-        switch_addr: String,},
+        switch_addr: String,
+    },
     Server {
         /// The Network Interface to bind
         #[arg(short, long)]
@@ -73,10 +74,10 @@ enum Mode {
         /// Address of the switch control plane (including port number)
         #[arg(short, long)]
         switch_addr: String,
-    }
+    },
 }
 
-async fn write_csv(args: Args, times: Arc<Mutex<HashMap::<u8, Vec<(u128, u128)>>>>) {
+async fn write_csv(args: Args, times: Arc<Mutex<HashMap<u8, Vec<(u128, u128)>>>>) {
     let scalestr = match args.scaling {
         true => "scaling",
         false => "no-scaling",
@@ -89,7 +90,7 @@ async fn write_csv(args: Args, times: Arc<Mutex<HashMap::<u8, Vec<(u128, u128)>>
         .open(format!(
             "star-chain-steps{:?}-{:?}-{:?}-{:?}-iterations{:?}-{:?}.csv",
             args.depth,
-            scalestr, 
+            scalestr,
             args.mode,
             args.remote,
             args.iterations,
@@ -121,23 +122,36 @@ async fn write_csv(args: Args, times: Arc<Mutex<HashMap::<u8, Vec<(u128, u128)>>
 
 #[tokio::main]
 async fn main() {
-    
     let args = Args::parse();
     match args.debug {
-    true => 
-    SimpleLogger::new()
-        .with_level(LevelFilter::Debug)
-        .init()
-        .unwrap(),
-    false => 
-    SimpleLogger::new()
-        .with_level(LevelFilter::Info)
-        .init()
-        .unwrap()
+        true => SimpleLogger::new()
+            .with_level(LevelFilter::Debug)
+            .init()
+            .unwrap(),
+        false => SimpleLogger::new()
+            .with_level(LevelFilter::Info)
+            .init()
+            .unwrap(),
     };
     let service_config = match &args.mode {
-        Mode::Client { interface, address, switch_addr } => Config { interface: interface.clone(), address: address.clone(), switch_addr: switch_addr.clone() },
-        Mode::Server { interface, address, switch_addr } => Config { interface: interface.clone(), address: address.clone(), switch_addr: switch_addr.clone() },
+        Mode::Client {
+            interface,
+            address,
+            switch_addr,
+        } => Config {
+            interface: interface.clone(),
+            address: address.clone(),
+            switch_addr: switch_addr.clone(),
+        },
+        Mode::Server {
+            interface,
+            address,
+            switch_addr,
+        } => Config {
+            interface: interface.clone(),
+            address: address.clone(),
+            switch_addr: switch_addr.clone(),
+        },
     };
 
     let times = Arc::new(Mutex::new(HashMap::<u8, Vec<(u128, u128)>>::new()));
@@ -158,19 +172,39 @@ async fn main() {
             times.lock().await.insert(1, Vec::new());
             let start = Instant::now();
             match &args.mode {
-                Mode::Client { .. } => star_benchmark_client(depth, service.clone(), args.remote.clone()).await,
-                Mode::Server { .. } => star_benchmark_server(depth, service.clone(), args.remote.clone()).await,
+                Mode::Client { .. } => {
+                    star_benchmark_client(depth, service.clone(), args.remote.clone()).await
+                }
+                Mode::Server { .. } => {
+                    star_benchmark_server(depth, service.clone(), args.remote.clone()).await
+                }
             };
-        
-            times.lock().await.get_mut(&0).unwrap().push((depth, start.elapsed().as_micros()));
+
+            times
+                .lock()
+                .await
+                .get_mut(&0)
+                .unwrap()
+                .push((depth, start.elapsed().as_micros()));
 
             let start = Instant::now();
             match &args.mode {
-                Mode::Client { .. } => chain_benchmark_client((depth/2) -1, service.clone(), args.remote.clone()).await,
-                Mode::Server { .. } => chain_benchmark_server((depth/2) - 2, service.clone(), args.remote.clone()).await,
+                Mode::Client { .. } => {
+                    chain_benchmark_client((depth / 2) - 1, service.clone(), args.remote.clone())
+                        .await
+                }
+                Mode::Server { .. } => {
+                    chain_benchmark_server((depth / 2) - 2, service.clone(), args.remote.clone())
+                        .await
+                }
             };
-            
-            times.lock().await.get_mut(&1).unwrap().push((depth, start.elapsed().as_micros()));
+
+            times
+                .lock()
+                .await
+                .get_mut(&1)
+                .unwrap()
+                .push((depth, start.elapsed().as_micros()));
             write_csv(args.clone(), times).await;
         }
     } else {
@@ -179,23 +213,56 @@ async fn main() {
         times.lock().await.insert(1, Vec::new());
         let start = Instant::now();
         match &args.mode {
-            Mode::Client { .. } => star_benchmark_client(args.depth, service.clone(), args.remote.clone()).await,
-            Mode::Server { .. } => star_benchmark_server(args.depth, service.clone(), args.remote.clone()).await,
+            Mode::Client { .. } => {
+                star_benchmark_client(args.depth, service.clone(), args.remote.clone()).await
+            }
+            Mode::Server { .. } => {
+                star_benchmark_server(args.depth, service.clone(), args.remote.clone()).await
+            }
         };
         let micros = start.elapsed().as_micros();
-        times.lock().await.get_mut(&0).unwrap().push((args.depth, micros));
-        let mut s1packets = service.recv_counter.lock().await.clone() + service.send_counter.lock().await.clone();
-        println!("Elapsed star: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / args.depth, s1packets);
+        times
+            .lock()
+            .await
+            .get_mut(&0)
+            .unwrap()
+            .push((args.depth, micros));
+        let mut s1packets =
+            service.recv_counter.lock().await.clone() + service.send_counter.lock().await.clone();
+        println!(
+            "Elapsed star: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}",
+            micros,
+            micros / args.depth,
+            s1packets
+        );
 
         let start = Instant::now();
         match &args.mode {
-            Mode::Client { .. } => chain_benchmark_client((args.depth/2) - 1, service.clone(), args.remote.clone()).await,
-            Mode::Server { .. } => chain_benchmark_server((args.depth/2) - 2, service.clone(), args.remote.clone()).await,
+            Mode::Client { .. } => {
+                chain_benchmark_client((args.depth / 2) - 1, service.clone(), args.remote.clone())
+                    .await
+            }
+            Mode::Server { .. } => {
+                chain_benchmark_server((args.depth / 2) - 2, service.clone(), args.remote.clone())
+                    .await
+            }
         };
         let micros = start.elapsed().as_micros();
-        times.lock().await.get_mut(&1).unwrap().push((args.depth, micros));
-        s1packets = (service.recv_counter.lock().await.clone() + service.send_counter.lock().await.clone()) - s1packets;
-        println!("Elapsed chain: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}", micros, micros / args.depth, s1packets);
+        times
+            .lock()
+            .await
+            .get_mut(&1)
+            .unwrap()
+            .push((args.depth, micros));
+        s1packets = (service.recv_counter.lock().await.clone()
+            + service.send_counter.lock().await.clone())
+            - s1packets;
+        println!(
+            "Elapsed chain: {:?}µs, avg: {:?}µs, number of packets: service1: {:?}",
+            micros,
+            micros / args.depth,
+            s1packets
+        );
 
         write_csv(args.clone(), times).await;
     }

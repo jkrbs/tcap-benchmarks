@@ -11,7 +11,7 @@ use tokio::time::Instant;
 
 #[tokio::main]
 async fn main() {
-    SimpleLogger::new().with_level(LevelFilter::Info).init().unwrap();
+    SimpleLogger::new().with_level(LevelFilter::Debug).init().unwrap();
 
     let service_config = Config {
         interface: "veth3".to_string(),
@@ -38,7 +38,7 @@ async fn main() {
 
     for _ in 0..100 {
         let now = Instant::now();
-        let r = pong_server.lock().await.request_invoke_with_continuation(vec!(Some(receiver_cap.clone()))).await;
+        let r = pong_server.lock().await.request_invoke_with_continuation(vec!(receiver_cap.lock().await.cap_id)).await;
         info!("ret: {:?}: {:?}", r, now.elapsed());
     }
     service.terminate().await;

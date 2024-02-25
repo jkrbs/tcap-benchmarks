@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use tcap::{object::tcap::object::{MemoryObject, RequestObject}, service::tcap::Service};
 use tokio::{sync::Mutex, time};
-
+use log::info;
 use crate::{CPU_CLOCK_SPEED, FRONTEND_TO_GPU_MEM_CAP, GPU_CAP, GPU_TO_FRONTEND_MEM_CAP};
 
 pub(crate) async fn gpu(
@@ -22,6 +22,7 @@ pub(crate) async fn gpu(
     let obj = Arc::new(Mutex::new(
         RequestObject::new(Box::new(move |_| {
             let handler = async move |s: Service, transfer_size: u64, frontend_address: String| {
+                info!("Running GPU MemTransfer");
                 for _ in 0..transfer_size {
                     let mem_cap = s
                         .create_remote_capability_with_id(frontend_address.clone(), FRONTEND_TO_GPU_MEM_CAP)

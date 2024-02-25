@@ -16,10 +16,10 @@ use clap::Parser;
 use csv::Writer;
 use log::*;
 use simple_logger::SimpleLogger;
-use std::{collections::HashMap, time::Duration};
 use std::fs::OpenOptions;
 use std::sync::Arc;
 use std::time::Instant;
+use std::{collections::HashMap, time::Duration};
 use tcap::{
     capabilities::tcap::CapID,
     config::Config,
@@ -30,6 +30,8 @@ use tokio::{sync::Mutex, time};
 pub(crate) static CPU_CLOCK_SPEED: u64 = 2100000000;
 
 pub(crate) static FRONTEND_END_CAP: CapID = 50;
+pub(crate) static FS_END_CAP: CapID = 51;
+
 pub(crate) static FRONTEND_CAP: CapID = 100;
 pub(crate) static FS_CAP: CapID = 200;
 pub(crate) static STORAGE_CAP: CapID = 300;
@@ -56,7 +58,17 @@ struct Args {
     /// depth of the call chain
     #[arg(short, long)]
     transfer_size: u64,
+    /// The Network Interface to bind
+    #[arg(long)]
+    interface: String,
 
+    /// Address to bind to (including port number)
+    #[arg(short, long)]
+    address: String,
+
+    /// Address of the switch control plane (including port number)
+    #[arg(short, long)]
+    switch_addr: String,
     /// set debug print level
     #[arg(long, action)]
     debug: bool,
@@ -65,38 +77,39 @@ struct Args {
 #[derive(clap::Subcommand, Clone, Debug)]
 enum Mode {
     Others {
-        /// The Network Interface to bind
-        #[arg(short, long)]
-        interface: String,
-
-        /// Address to bind to (including port number)
-        #[arg(short, long)]
-        address: String,
-
-        /// Address of the switch control plane (including port number)
-        #[arg(short, long)]
-        switch_addr: String,
-
         /// address of the frontend service
         #[arg(short, long)]
         frontend_address: String,
     },
     Frontend {
-        /// The Network Interface to bind
+        /// Address of the service running the FS
         #[arg(short, long)]
-        interface: String,
+        fs: String,
 
-        /// Address to bind to (including port number)
+        /// Address of the service running the Storage
         #[arg(short, long)]
-        address: String,
+        storage: String,
 
-        /// Address of the switch control plane (including port number)
+        /// Address of the service running the GPU
         #[arg(short, long)]
-        switch_addr: String,
-        
+        gpu: String,
+    },
+    FS {
         /// Address of the service running with Other
         #[arg(short, long)]
-        remote: String,
+        frontend_address: String,
+    },
+
+    GPU {
+        /// Address of the service running with Other
+        #[arg(short, long)]
+        frontend_address: String,
+    },
+
+    Storage {
+        /// Address of the service running with Other
+        #[arg(short, long)]
+        frontend_address: String,
     },
 }
 
@@ -115,16 +128,13 @@ async fn write_csv(mode: String, iterations: u128, times: Vec<(u64, u128)>) {
     let mut wtr = Writer::from_writer(file);
 
     times.iter().for_each(|v| {
-        wtr.write_record([
-            v.0.to_string().as_str(),
-            v.1.to_string().as_str(),
-        ])
-        .unwrap();
+        wtr.write_record([v.0.to_string().as_str(), v.1.to_string().as_str()])
+            .unwrap();
     });
     wtr.flush().unwrap();
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 4)]
+#[tokio::main]
 async fn main() {
     let args = Args::parse();
     match args.debug {
@@ -137,32 +147,73 @@ async fn main() {
             .init()
             .unwrap(),
     };
-    match args.mode {
-        Mode::Others {
-            interface,
-            address,
-            switch_addr,
-            frontend_address,
-        } => {
-            let service = Service::new(Config {
-                interface,
-                address,
-                switch_addr,
-            })
-            .await;
 
+    let service = Service::new(Config {
+        interface: args.interface,
+        address: args.address,
+        switch_addr: args.switch_addr,
+    })
+    .await;
+
+    let s = service.clone();
+    let service_thread = tokio::spawn(async move {
+        s.clone().run().await.unwrap();
+    });
+
+    match args.mode {
+        Mode::Others { frontend_address } => {
             let s = service.clone();
-            let service_thread = tokio::spawn(async move {
-                s.clone().run().await.unwrap();
+            let fa = frontend_address.clone();
+            tokio::spawn(async move{
+                fs(args.debug, s.clone(), fa.clone()).await;
             });
-            fs(args.debug, service.clone(), frontend_address.clone()).await;
-            storage(
+            let s = service.clone();
+            let fa = frontend_address.clone();
+            tokio::spawn(async move {
+            gpu(
                 args.debug,
-                service.clone(),
+                s.clone(),
                 args.transfer_size,
-                frontend_address.clone(),
+                fa.clone(),
             )
             .await;
+            });
+            let s = service.clone();
+            let fa = frontend_address.clone();
+            tokio::spawn(async move {
+                    storage(
+                        args.debug,
+                        s.clone(),
+                        args.transfer_size,
+                        fa.clone(),
+                    )
+                    .await;
+            });
+            let mut times: Vec<(u64, u128)> = vec![];
+            for _ in 0..args.iterations {
+                let start = Instant::now();
+                client(args.debug, service.clone(), frontend_address.clone()).await;
+                let time = start.elapsed();
+                info!(
+                    "Time: {} µs, transfer_size: {} KiB",
+                    time.as_micros(),
+                    args.transfer_size
+                );
+                service.reset().await;
+                times.push((args.transfer_size, time.as_micros()));
+            }
+            write_csv("Client".to_string(), args.iterations, times).await;
+
+            let end_cap = service
+                .create_remote_capability_with_id(frontend_address, FRONTEND_END_CAP)
+                .await;
+            end_cap.lock().await.request_invoke().await.unwrap();
+        }
+        Mode::FS { frontend_address } => {
+            fs(args.debug, service.clone(), frontend_address.clone()).await;
+        }
+
+        Mode::GPU { frontend_address } => {
             gpu(
                 args.debug,
                 service.clone(),
@@ -170,44 +221,27 @@ async fn main() {
                 frontend_address.clone(),
             )
             .await;
-            info!("wiating 5 seconds for client to run");
-            time::sleep(Duration::from_secs(5)).await;
-
-            let mut times: Vec<(u64, u128)> = vec![];
-            for _ in 0..args.iterations {
-                let start = Instant::now();
-                client(args.debug, service.clone(), frontend_address.clone()).await;
-                let time = start.elapsed();
-                info!("Time: {} µs, transfer_size: {} KiB", time.as_micros(), args.transfer_size);
-                service.reset().await;
-                times.push((args.transfer_size, time.as_micros()));
-            }
-            write_csv("Client".to_string(), args.iterations, times).await;
-            info!("done");
-            let end_cap = service.create_remote_capability_with_id(frontend_address, FRONTEND_END_CAP).await;
-            end_cap.lock().await.request_invoke_no_wait().await.unwrap();
-            service_thread.abort();
         }
-        Mode::Frontend {
-            interface,
-            address,
-            switch_addr,
-            remote
-        } => {
-            let service = Service::new(Config {
-                interface,
-                address,
-                switch_addr,
-            })
+
+        Mode::Storage { frontend_address } => {
+            storage(
+                args.debug,
+                service.clone(),
+                args.transfer_size,
+                frontend_address.clone(),
+            )
             .await;
+        }
 
-            let s = service.clone();
-            let service_thread = tokio::spawn(async move {
-                s.clone().run().await.unwrap();
-            });
-
-            frontend(args.debug, service.clone(), args.transfer_size, (remote.clone(), remote.clone(), remote.clone())).await;
-            service_thread.abort();
+        Mode::Frontend { fs, storage, gpu } => {
+            frontend(
+                args.debug,
+                service.clone(),
+                args.transfer_size,
+                (fs.clone(), storage.clone(), gpu.clone()),
+            )
+            .await;
         }
     };
+    service_thread.abort();
 }

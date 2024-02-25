@@ -1,4 +1,5 @@
 use std::{sync::Arc, time::Duration};
+use log::info;
 use tcap::{object::tcap::object::MemoryObject, service::tcap::Service};
 
 use tcap::object::tcap::object::RequestObject;
@@ -17,11 +18,12 @@ pub(crate) async fn storage(
     let mem_obj = Arc::new(Mutex::new(MemoryObject::new(&buf).await));
     let mem_cap = service.create_capability_with_id(STORAGE_TO_FRONEND_MEM_CAP).await;
     mem_cap.lock().await.bind_mem(mem_obj).await;
-    mem_cap.lock().await.delegate(frontend_address.clone().as_str().into()).await.unwrap();
+   // mem_cap.lock().await.delegate(frontend_address.clone().as_str().into()).await.unwrap();
 
     let s = service.clone();
     let obj = Arc::new(Mutex::new(
         RequestObject::new(Box::new(move |_| {
+            info!("Running Storage");
             let handler = async move |s: Service, transfer_size: u64, frontend_address: String| {
                 for _ in 0..transfer_size {
                     let mem_cap = s

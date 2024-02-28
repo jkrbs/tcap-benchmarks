@@ -178,9 +178,9 @@ async fn main() {
         let s1packets =
             service.recv_counter.lock().await.clone() + service.send_counter.lock().await.clone();
         println!(
-            "Elapsed: {:?}µs, rate: {:?}bytes/µs, number of packets: service1: {:?}",
+            "Elapsed: {:?}µs, rate: {:?}Mbit/s, number of packets: service1: {:?}",
             micros,
-            1024/micros,
+            2_u128.pow(14)*8/micros,
             s1packets
         );
 

@@ -27,15 +27,7 @@ pub(crate) async fn frontend(debug: bool, service: Service, transfer_size:u64, a
             mem_cap.lock().await.bind_mem(mem_obj).await;
             mem_cap.lock().await.delegate(gpu_address.as_str().into()).await.unwrap();
             
-            debug!("starting client mem transfer");
-            // copy client buffer to frontend
-            for _ in 0..transfer_size {
-                let mem_cap = s.create_remote_capability_with_id(client_address.clone(), CLIENT_TO_FRONEND_MEM_CAP).await;
-                mem_cap.lock().await.cap_type = CapType::Memory;
-                debug!("Calling get buffer");
-                let _mem_obj = mem_cap.lock().await.get_buffer().await;
-                s.clone().delete_capability(mem_cap).await;
-            }
+        
             debug!("Data Copy Client -> Frontend finished");
             let fs_cap = s.create_remote_capability_with_id(fs_address.clone(), FS_CAP).await;
             let storage_cap = s.create_remote_capability_with_id(storage_address.clone(), STORAGE_CAP).await;
@@ -47,29 +39,9 @@ pub(crate) async fn frontend(debug: bool, service: Service, transfer_size:u64, a
             // invoke storage
             let _ = storage_cap.lock().await.request_invoke().await.unwrap();
             debug!("Finished Storage Invocation");
-            // copy buffer from storage
-            for _ in 0..transfer_size {
-                let mem_cap = s
-                    .create_remote_capability_with_id(storage_address.clone(), STORAGE_TO_FRONEND_MEM_CAP)
-                    .await;
-                mem_cap.lock().await.cap_type = CapType::Memory;
-                let _mem_obj = mem_cap.lock().await.get_buffer().await;
-                s.clone().delete_capability(mem_cap).await;
-            }
-            debug!("Data Copy Storage -> Frontend finished");
             // invoke gpu
             let _ = gpu_cap.lock().await.request_invoke().await.unwrap();
             debug!("Finished GPU Invocation");
-            // copy buffer from gpu
-            for _ in 0..transfer_size {
-                let mem_cap = s
-                    .create_remote_capability_with_id(gpu_address.clone(), GPU_TO_FRONTEND_MEM_CAP)
-                    .await;
-                mem_cap.lock().await.cap_type = CapType::Memory;
-                let _mem_obj = mem_cap.lock().await.get_buffer().await;
-                s.clone().delete_capability(mem_cap).await;
-            }
-            debug!("Data Copy GPU -> Frontend finished");
             debug!("request params {:?}", caps);
             caps[0].as_ref().unwrap().lock().await.request_invoke_no_wait().await.unwrap();
             nnn.notify_waiters();

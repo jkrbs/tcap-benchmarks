@@ -30,8 +30,8 @@ pub(crate) async fn gpu(
                     let _mem_obj = mem_cap.lock().await.get_buffer().await;
                     s.clone().delete_capability(mem_cap).await;
                 }
-                time::sleep(Duration::from_millis(
-                    (1300 * transfer_size) / (CPU_CLOCK_SPEED / 1000),
+                time::sleep(Duration::from_nanos(
+                    1300 * transfer_size * CPU_CLOCK_SPEED
                 ))
                 .await;
             };

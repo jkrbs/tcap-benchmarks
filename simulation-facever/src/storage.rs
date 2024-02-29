@@ -25,15 +25,8 @@ pub(crate) async fn storage(
         RequestObject::new(Box::new(move |_| {
             info!("Running Storage");
             let handler = async move |s: Service, transfer_size: u64, frontend_address: String| {
-                for _ in 0..transfer_size {
-                    let mem_cap = s
-                        .create_remote_capability_with_id(frontend_address.clone(), FRONTEND_TO_STORAGE_MEM_CAP)
-                        .await;
-                    let _mem_obj = mem_cap.lock().await.get_buffer().await;
-                    s.clone().delete_capability(mem_cap).await;
-                }
-                time::sleep(Duration::from_millis(
-                    (300 * transfer_size) / (CPU_CLOCK_SPEED / 1000),
+                time::sleep(Duration::from_nanos(
+                    3 * transfer_size * CPU_CLOCK_SPEED,
                 ))
                 .await;
             };

@@ -9,7 +9,7 @@ use crate::{CPU_CLOCK_SPEED, FS_CAP, FS_END_CAP};
 pub(crate) async fn fs(debug: bool, service: Service, frontend: String) {
     let handler = Box::new(move |_| {
         info!("Running FS");
-        time::sleep(Duration::from_secs(10000/CPU_CLOCK_SPEED)).is_elapsed();
+        time::sleep(Duration::from_nanos(10000)).is_elapsed();
         Ok(())
     });
 

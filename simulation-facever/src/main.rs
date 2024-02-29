@@ -17,17 +17,15 @@ use csv::Writer;
 use log::*;
 use simple_logger::SimpleLogger;
 use std::fs::OpenOptions;
-use std::sync::Arc;
+
 use std::time::Instant;
-use std::{collections::HashMap, time::Duration};
 use tcap::{
     capabilities::tcap::CapID,
     config::Config,
     service::{self, tcap::Service},
 };
-use tokio::{sync::Mutex, time};
 
-pub(crate) static CPU_CLOCK_SPEED: u64 = 2100000000;
+pub(crate) static CPU_CLOCK_SPEED: u64 = 2100;
 
 pub(crate) static FRONTEND_END_CAP: CapID = 50;
 pub(crate) static FS_END_CAP: CapID = 51;

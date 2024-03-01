@@ -17,12 +17,8 @@ pub(crate) async fn frontend(debug: bool, service: Service, transfer_size:u64, a
         let handler = async move |caps: Vec<Option<Arc<Mutex<tcap::capabilities::tcap::Capability>>>>,s: Service, transfer_size: u64, fs_address: String, storage_address: String, gpu_address: String, client_address: String| {
             debug!("Running Frontend Handler");
 
-            let buf = [0 as u8; 1024];
-            let mem_obj = Arc::new(Mutex::new(MemoryObject::new(&buf).await));
-            let mem_cap = s.create_capability_with_id(FRONTEND_TO_GPU_MEM_CAP).await;
-            mem_cap.lock().await.bind_mem(mem_obj).await;
-            let buf = [0 as u8; 1024];
-            let mem_obj = Arc::new(Mutex::new(MemoryObject::new(&buf).await));
+            let buf = Vec::from([0 as u8; 1024]);
+            let mem_obj = Arc::new(Mutex::new(MemoryObject::new(buf).await));
             let mem_cap = s.create_capability_with_id(FRONTEND_TO_STORAGE_MEM_CAP).await;
             mem_cap.lock().await.bind_mem(mem_obj).await;
             mem_cap.lock().await.delegate(gpu_address.as_str().into()).await.unwrap();

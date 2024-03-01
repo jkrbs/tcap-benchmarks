@@ -6,8 +6,8 @@ use log::info;
 use crate::{CLIENT_TO_FRONEND_MEM_CAP, FRONTEND_CAP, FS_CAP};
 
 pub(crate) async fn client(debug: bool, service: Service, frontend_address: String) {
-    let buf = [0 as u8; 1024];
-    let mem_obj = Arc::new(Mutex::new(MemoryObject::new(&buf).await));
+    let buf = Vec::from([0 as u8; 1024]);
+    let mem_obj = Arc::new(Mutex::new(MemoryObject::new(buf).await));
     let mem_cap = service.create_capability_with_id(CLIENT_TO_FRONEND_MEM_CAP).await;
     mem_cap.lock().await.bind_mem(mem_obj).await;
     // mem_cap.lock().await.delegate(frontend_address.as_str().into()).await.unwrap();

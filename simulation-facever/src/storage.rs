@@ -14,8 +14,8 @@ pub(crate) async fn storage(
     frontend_address: String,
 ) {
     let frontend = frontend_address.clone();
-    let buf = [0 as u8; 1024];
-    let mem_obj = Arc::new(Mutex::new(MemoryObject::new(&buf).await));
+    let buf = Vec::from([0 as u8; 1024]);
+    let mem_obj = Arc::new(Mutex::new(MemoryObject::new(buf).await));
     let mem_cap = service.create_capability_with_id(STORAGE_TO_FRONEND_MEM_CAP).await;
     mem_cap.lock().await.bind_mem(mem_obj).await;
    // mem_cap.lock().await.delegate(frontend_address.clone().as_str().into()).await.unwrap();
@@ -23,17 +23,8 @@ pub(crate) async fn storage(
     let s = service.clone();
     let obj = Arc::new(Mutex::new(
         RequestObject::new(Box::new(move |_| {
-            info!("Running Storage");
-            let handler = async move |s: Service, transfer_size: u64, frontend_address: String| {
-                time::sleep(Duration::from_nanos(
-                    3 * transfer_size * CPU_CLOCK_SPEED,
-                ))
-                .await;
-            };
-            tokio::runtime::Handle::current().spawn(handler(
-                s.clone(),
-                transfer_size,
-                frontend_address.clone(),
+            std::thread::sleep(Duration::from_nanos(
+                3 * transfer_size * CPU_CLOCK_SPEED
             ));
 
             Ok(())

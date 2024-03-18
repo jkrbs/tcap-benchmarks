@@ -71,8 +71,8 @@ async fn main() {
         }
         service.controller_timer_stop().await;
 
-        let sum: u64 = Iterator::sum(time_vec.iter().map(|t| {t.as_micros() as u64}));
-        info!("c: {:?}, time avg: {:?} µs", c , sum/(time_vec.len() as u64));
+        let sum: u64 = Iterator::sum(time_vec.iter().map(|t| {t.as_nanos() as u64}));
+        info!("c: {:?}, time avg: {:?} ns", c , sum/(time_vec.len() as u64));
         times.insert(c, time_vec);
 
         for c in cap_vec {
@@ -84,13 +84,13 @@ async fn main() {
 
     let _ = service_thread.await;
 
-    let mut wtr = Writer::from_path(format!("latency-bench-max-micro-sec-{:?}-{:?}.csv", num_caps, Service::get_compilation_commit())).unwrap();
+    let mut wtr = Writer::from_path(format!("latency-bench-max-nanos-sec-{:?}-{:?}.csv", num_caps, Service::get_compilation_commit())).unwrap();
     let mut keys = times.keys().collect::<Vec<&i32>>();
     keys.sort();
     keys.iter().for_each(|key| {
         let mut counter = 0;
         times.get(key).unwrap().iter().for_each(|v| {
-            wtr.write_record([key.to_string().as_str(), counter.to_string().as_str(), v.as_micros().to_string().as_str()]).unwrap();
+            wtr.write_record([key.to_string().as_str(), counter.to_string().as_str(), v.as_nanos().to_string().as_str()]).unwrap();
             counter += 1;
         });
     });

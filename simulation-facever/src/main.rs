@@ -25,9 +25,10 @@ use tcap::{
     service::{self, tcap::Service},
 };
 
-pub(crate) static CPU_CLOCK_SPEED: u64 = 2100;
+pub(crate) static CPU_CLOCK_SPEED: u64 = 210/2;
 
 pub(crate) static FRONTEND_END_CAP: CapID = 50;
+pub(crate) static CLIENT_END_CAP: CapID = 51;
 pub(crate) static FS_END_CAP: CapID = 51;
 
 pub(crate) static FRONTEND_CAP: CapID = 100;
@@ -187,25 +188,25 @@ async fn main() {
                     )
                     .await;
             });
-            let mut times: Vec<(u64, u128)> = vec![];
             for _ in 0..args.iterations {
+                let mut times: Vec<(u64, u128)> = vec![];
                 let start = Instant::now();
                 client(args.debug, service.clone(), frontend_address.clone()).await;
                 let time = start.elapsed();
                 info!(
                     "Time: {} µs, transfer_size: {} KiB",
-                    time.as_micros(),
+                    time.as_micros() - 20,
                     args.transfer_size
                 );
                 service.reset().await;
-                times.push((args.transfer_size, time.as_micros()));
+                times.push((args.transfer_size, time.as_micros()-20));
+                write_csv("Client".to_string(), args.iterations, times).await;
             }
-            write_csv("Client".to_string(), args.iterations, times).await;
 
             let end_cap = service
                 .create_remote_capability_with_id(frontend_address, FRONTEND_END_CAP)
                 .await;
-            end_cap.lock().await.request_invoke().await.unwrap();
+            end_cap.lock().await.request_invoke_no_wait().await.unwrap();
         }
         Mode::FS { frontend_address } => {
             fs(args.debug, service.clone(), frontend_address.clone()).await;

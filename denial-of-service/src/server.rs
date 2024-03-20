@@ -26,7 +26,7 @@ pub async fn server(service: Service) {
         let mut counter = 0;
         loop {
             let before = service.recv_counter.lock().await.clone();
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_millis(1)).await;
             ppm.lock()
                 .await
                 .push((counter, service.recv_counter.lock().await.clone() - before));

@@ -7,13 +7,15 @@ use simple_logger::SimpleLogger;
 use std::fs::OpenOptions;
 use std::sync::Arc;
 use std::time::Instant;
-use tcap::{config::Config, service::tcap::Service};
+use tcap::{config::Config, service::tcap::Service, MEMCOPY_BUFFER_SIZE};
 use tokio::sync::Mutex;
 pub mod client;
 pub mod server;
 
 use crate::client::client;
 use crate::server::server;
+
+pub(crate) const EXPONENT:u32 = 20;
 
 #[derive(clap::Parser, Clone, Debug)]
 #[command(version, about, long_about = None)]
@@ -71,13 +73,9 @@ enum Mode {
 }
 
 async fn write_csv(args: Args, times: Arc<Mutex<Vec<(usize, u128)>>>) {
-    let scalestr = match args.scaling {
-        true => "scaling",
-        false => "no-scaling-1024bytes",
-    };
-
-    let file = OpenOptions::new()
-        .write(true)
+    let scalestr =  format!("no-scaling-{:?}B",  MEMCOPY_BUFFER_SIZE);
+   let file = OpenOptions::new()
+       .write(true)
         .append(true)
         .create(true)
         .open(format!(
@@ -151,10 +149,18 @@ async fn main() {
                 Mode::Client { .. } => {
                     let start = Instant::now();
                     client(args.iterations, service.clone(), args.remote.clone(), args.debug, size).await;
+                    let time = start.elapsed().as_micros()/args.iterations;
                     times
                 .lock()
                 .await
-                .push((size, start.elapsed().as_micros()));
+                .push((size, time));
+        println!(
+            "Elapsed: {:?}µs, rate: {:?}Mbit/s",
+            time,
+            (size as u128*8)/time
+        );
+
+
                 }
                 Mode::Server { .. } => {
                     server(service.clone()).await
@@ -174,13 +180,13 @@ async fn main() {
         times
             .lock()
             .await
-            .push((1024, micros));
+            .push((2_usize.pow(EXPONENT)+ 2_usize.pow(12), micros));
         let s1packets =
             service.recv_counter.lock().await.clone() + service.send_counter.lock().await.clone();
         println!(
             "Elapsed: {:?}µs, rate: {:?}Mbit/s, number of packets: service1: {:?}",
             micros,
-            2_u128.pow(14)*8/micros,
+            (2_u128.pow(EXPONENT) + 2_u128.pow(12))*8/micros,
             s1packets
         );
 

@@ -12,7 +12,7 @@ pub(crate) async fn gpu(
     frontend_address: String,
 ) {
     let frontend = frontend_address.clone();
-    let buf = Vec::from([0 as u8; 1024]);
+    let buf = Vec::from([0 as u8; 2_usize.pow(12)]);
     let mem_obj = Arc::new(Mutex::new(MemoryObject::new(buf).await));
     let mem_cap = service.create_capability_with_id(GPU_TO_FRONTEND_MEM_CAP).await;
     mem_cap.lock().await.bind_mem(mem_obj).await;
@@ -21,26 +21,8 @@ pub(crate) async fn gpu(
     let s = service.clone();
     let obj = Arc::new(Mutex::new(
         RequestObject::new(Box::new(move |_| {
-            let handler = async move |s: Service, transfer_size: u64, frontend_address: String| {
-                info!("Running GPU MemTransfer");
-                for _ in 0..transfer_size {
-                    let mem_cap = s
-                        .create_remote_capability_with_id(frontend_address.clone(), FRONTEND_TO_GPU_MEM_CAP)
-                        .await;
-                    let _mem_obj = mem_cap.lock().await.get_buffer().await;
-                    s.clone().delete_capability(mem_cap).await;
-                }
-            };
+            std::thread::sleep(Duration::from_nanos(13 * transfer_size * CPU_CLOCK_SPEED));
 
-            let join_handle = tokio::runtime::Handle::current().spawn(handler(
-                s.clone(),
-                transfer_size,
-                frontend_address.clone(),
-            ));
-            std::thread::sleep(Duration::from_nanos(1300 * transfer_size * CPU_CLOCK_SPEED));
-            if ! join_handle.is_finished() {
-                info!("copy not finished yet");
-            }
             Ok(())
         }))
         .await,

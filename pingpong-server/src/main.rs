@@ -22,7 +22,7 @@ async fn main() {
     ));
 
     let service_config = Config {
-        interface: "veth1".to_string(),
+        interface: "enp216s0f0".to_string(),
         address: "10.0.1.2:1234".to_string(),
         switch_addr: "10.0.9.2:1234".to_string(),
     };

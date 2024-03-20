@@ -2,13 +2,13 @@ use std::{sync::Arc, time::Duration};
 
 use tcap::{object::tcap::object::RequestObject, service::tcap::Service};
 use tokio::{sync::{Mutex, Notify}, time};
-use log::info;
+use log::{info, debug};
 use crate::{CPU_CLOCK_SPEED, FS_CAP, FS_END_CAP};
 
 
 pub(crate) async fn fs(debug: bool, service: Service, frontend: String) {
     let handler = Box::new(move |_| {
-        info!("Running FS");
+        debug!("Running FS");
         time::sleep(Duration::from_nanos(10000)).is_elapsed();
         Ok(())
     });
@@ -32,6 +32,6 @@ pub(crate) async fn fs(debug: bool, service: Service, frontend: String) {
 
     let final_cap = service.create_capability_with_id(FS_END_CAP).await;
     final_cap.lock().await.bind_req(fin).await;
-    info!("FS Service is available");
+    debug!("FS Service is available");
     n.notified().await;
 }

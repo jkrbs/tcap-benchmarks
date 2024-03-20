@@ -10,9 +10,9 @@ pub async fn client(no_packets: u128, _delay: u64, service: Service, remote: Str
     let packet_rate_tracker = async move |ppm: Arc<Mutex<Vec<(u128, u128)>>>| {
         let mut counter = 0;
         loop {
-            let before = service.recv_counter.lock().await.clone();
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            ppm.lock().await.push((counter, service.recv_counter.lock().await.clone() - before));
+            let before = service.send_counter.lock().await.clone();
+            tokio::time::sleep(Duration::from_millis(1)).await;
+            ppm.lock().await.push((counter, service.send_counter.lock().await.clone() - before));
             counter += 1;
         }
     };
@@ -21,7 +21,7 @@ pub async fn client(no_packets: u128, _delay: u64, service: Service, remote: Str
     for _ in 0..no_packets {
         let _ = invalid.lock().await.request_invoke_no_wait().await;
     }
- 
+    tokio::time::sleep(Duration::from_secs(1)).await; 
     packet_rate.abort();
     write_csv("client-packet-rate.csv".to_string(), packets_per_milisecond).await;
     final_cap.lock().await.request_invoke().await.unwrap();

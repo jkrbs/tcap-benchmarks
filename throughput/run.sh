@@ -5,7 +5,7 @@
     --iterations 100 \
     --remote 10.0.1.2:1234 \
 	client \
-	--interface veth3 \
+	--interface enp94s0f1 \
 	--switch-addr 10.0.9.2:1234 \
 	--address 10.0.3.2:1234
     sleep 3

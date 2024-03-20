@@ -34,7 +34,7 @@ async fn main() {
     SimpleLogger::new().with_level(LevelFilter::Info).init().unwrap();
 
     let service_config = Config {
-        interface: "veth3".to_string(),
+        interface: "enp94s0f1".to_string(),
         address: "10.0.3.2:1234".to_string(),
         switch_addr: "10.0.9.2:1234".to_string(),
     };
@@ -60,6 +60,12 @@ async fn main() {
             cap_vec.push(cap);
         }
 
+        // warmup
+        for _ in 0..10 {
+            pong_server.lock().await.request_invoke_with_continuation(vec!(cap.lock().await.cap_id)).await.unwrap();
+        }
+
+
         for _ in 0..100 {
             let now = Instant::now();
             pong_server.lock().await.request_invoke_with_continuation(vec!(cap.lock().await.cap_id)).await.unwrap();
@@ -67,7 +73,7 @@ async fn main() {
             let time = now.elapsed();
             time_vec.push(time);
         }
-        let sum: u64 = Iterator::sum(time_vec.iter().map(|t| {t.as_micros() as u64}));
+        let sum: u64 = Iterator::sum(time_vec.iter().map(|t| {t.as_nanos() as u64}));
         info!("c: {:?}, time avg: {:?} µs", c , sum/(time_vec.len() as u64));
         times.insert(c, time_vec);
 
@@ -80,7 +86,7 @@ async fn main() {
 
     let _ = service_thread.await;
 
-    let mut wtr = Writer::from_path(format!("latency-bench-max-micro-sec-{:?}-{:?}.csv", num_caps, Service::get_compilation_commit())).unwrap();
+    let mut wtr = Writer::from_path(format!("latency-bench-max-nanos-sec-{:?}-{:?}.csv", num_caps, Service::get_compilation_commit())).unwrap();
     let mut keys = times.keys().collect::<Vec<&i32>>();
     keys.sort();
     keys.iter().for_each(|key| {

@@ -2,11 +2,12 @@ use std::sync::Arc;
 use tcap::service::tcap::Service;
 use tcap::object::tcap::object::{MemoryObject, RequestObject};
 use tokio::sync::{Mutex, Notify};
+use crate::EXPONENT;
 
 pub async fn server(service: Service) {
     let mut buf =  Vec::<u8>::new();
     let mut val = 0;
-    for i in 0..2_u64.pow(12) {
+    for i in 0..(2_usize.pow(20) + 2_usize.pow(8)){
         buf.push(val);
         val += 3;
     }

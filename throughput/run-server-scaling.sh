@@ -7,7 +7,7 @@ while [ "$n" -lt 50 ]; do
 	--remote 10.0.3.2:1234 \
 	--scaling \
 	server \
-	--interface veth1 \
+	--interface enp94s0f0 \
 	--switch-addr 10.0.9.2:1234 \
 	--address 10.0.1.2:1234
 done

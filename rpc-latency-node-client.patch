@@ -1,0 +1,56 @@
+--- rpc-latency-caladan_node-client.cpp	2024-03-17 10:35:18.999886633 +0100
++++ rpc-latency-raw-csv.cpp	2024-03-20 10:55:58.413178550 +0100
+@@ -62,37 +62,27 @@
+         .create().get();
+     LOG(INFO) << "retrieving server request... done";
+ 
+-    // parameters
+-    auto params = get_trun_parameters();
+-    params.batch_group_size = 10;
+-    params.batch_size_warmup = 10;
+-    params.batch_size = 10000;
+-    params.stddev_perc = 3;
+-    params.confidence_sigma = 2;
+-    params.confidence_outlier_sigma = 4;
+-    if (GPROF) {
+-        LOG(INFO) << "setting fixed-length experiment";
+-        params.stddev_perc = 0;
+-        params.confidence_sigma = 0;
+-        params.batch_group_size = 5;
+-        params.batch_size_warmup = 10;
+-        params.batch_size = 5000;
+-    }
+ 
+     // run
++    auto durations = std::vector<double>();
+     LOG(INFO) << "executing...";
+-    auto results = trun::run(
+-        params,
+-        [&]() -> void {
+-            done.store(false, std::memory_order_release);
+-            r_server.invoke().as_callback();
+-            // NOTE: break_run() called on response above
+-            ch->run([&](){ return done.load(std::memory_order_acquire); });
+-        });
++    for(int i = 0; i < 1000 ; i++ ) {
++        const auto start = std::chrono::high_resolution_clock::now();
++        done.store(false, std::memory_order_release);
++        r_server.invoke().as_callback();
++        // NOTE: break_run() called on response above
++        ch->run([&](){ return done.load(std::memory_order_acquire); });
++        const auto end = std::chrono::high_resolution_clock::now();
++        const std::chrono::duration<double> time = end - start;
++        durations.push_back(time.count());
++    }
++
+     LOG(INFO) << "executing... done";
+ 
+     // write results
+     std::ofstream rout("raw-rpc-lat.csv", std::ios::out);
+-    trun::dump::csv(results, rout);
+-    write_trun_results(output, results);
++    for (auto val : durations) {
++        rout << val << std::endl;
++    }
++    rout.close();
+ }
